@@ -1,0 +1,16 @@
+#!/bin/bash
+#Script to convert HH:MM:SS format time into a number of seconds.
+
+if [ $# -lt 1 ]
+then
+    echo "Error must pass information"
+    exit 1
+fi
+
+secs=${1:=-1}
+H=`echo ${secs} | awk -F":" '{print $1}'`
+M=`echo ${secs} | awk -F":" '{print $2}'`
+S=`echo ${secs} | awk -F":" '{print $3}'`
+sec=$((${H}*60*60+${M}*60+${S}))
+echo ${sec}
+exit 0

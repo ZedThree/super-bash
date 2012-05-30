@@ -1,0 +1,31 @@
+#!/bin/bash
+#Script to convert a number of seconds into HH:MM:SS format
+
+if [ $# -lt 1 ]
+then
+    echo "Error must pass information"
+    exit 1
+fi
+
+secs=${1:=-1}
+#secs=`calc 1*${secs} | awk -F"." '{print $1}'`
+secs=`echo ${secs} | awk -F"." '{print $1}'`
+if [ "${secs}" == "" ]
+then
+    secs=0
+fi
+
+h=$(( secs / 3600 ))
+#h=`calc "scale=0 ; ${secs} / 3600"`
+#HOURS=`echo ${h} | awk -F"." '{print $1}' | tr "\-\." "-0."`
+m=$(( ( secs / 60 ) % 60 ))
+#m=`calc "scale=0 ; (${secs}/60) % 60"`
+#MINS=`echo ${m} | awk -F"." '{print $1}' | tr "\-\." "-0."`
+s=$(( secs % 60 ))
+#s=`calc "scale=0 ; ${secs} % 60"`
+#SECS=`echo ${s} | awk -F"." '{print $1}' | tr "\-\." "-0."`
+
+printf "%02d:%02d:%02d\n" $h $m $s
+#printf "%02d:%02d:%02d\n" ${HOURS} ${MINS} ${SECS}
+
+exit 0
