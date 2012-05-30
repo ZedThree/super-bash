@@ -3,20 +3,39 @@
 #A simple script to do floating point maths
 #Author: David Dickinson
 #Date: 22/06/2010
+#Updated: 30/05/2012
 
 #Define expected number of arguements
 EXPECTED_ARGS=1
 
 #Check we get sufficient parameters
-if [ ! $# -eq $EXPECTED_ARGS ]
+if [ ! $# -eq $EXPECTED_ARGS ] 
 then
-       echo "Error: recieved "$#" args when expected exactly
-"$EXPECTED_ARGS
-       echo $0 "usage: "$0" calculation"
-       exit 1
+	echo "Error: recieved "$#" args when expected exactly "$EXPECTED_ARGS
+	echo $0 "usage: "$0" calculation"
+	echo "Tip: Consider wrapping your command in quotes!"
+	exit 1
 fi
 
+
+#Split options string
+NPAR=`echo ${1} | awk -F";" '{print NF}'`
+if [ ${NPAR} -eq 1 ]
+then
+    VAL=${1}
+    OPT=""
+else
+    VAL=`echo ${1} | awk -F";" '{print $2}'`
+    OPT=`echo ${1} | awk -F";" '{print $1}'`"; "
+fi
+
+#Handle continued lines
+VAL=`echo ${VAL} | sed ':a;N;$!ba;s/\\\n//g' | sed 's/\\\ //g'`
+
+#Handle exponential notation
+VAL=`echo ${VAL} | sed 's/[eEdD]\([-+0-9]*\)/\*10\^(0\1)/g'`
+
 #ECHO calculation to bc and make sure normal formatting used!
-echo "scale=8; $1" | bc | sed 's/\-\./\-0\./g' | sed 's/^\./0./g'
+echo "scale=8; ${OPT}${VAL}" | bc | sed 's/\-\./\-0\./g' | sed 's/^\./0./g'
 
 exit 0
