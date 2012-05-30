@@ -1,0 +1,37 @@
+#!/bin/bash
+
+#Move to column $1
+function mcol(){
+
+   VAL=${1:-10}
+        tput cub `tput cols`
+        tput cuf ${VAL}
+}
+
+# Total number of nodes in use
+num_nodes=`qstat -a | grep hpcff | grep ' R ' | awk '{total = total + $6}; END {print total+0}'`
+
+# Total number of queued jobs
+jobs_queued=`qstat -a | grep hpcff | grep ' Q ' | awk 'END {print NR}'`
+
+# Total number of queued nodes
+nodes_queued=`qstat -a | grep hpcff | grep ' Q ' | awk '{total = total + $6}; END {print total+0}'`
+
+echo -en "Number of nodes"
+mcol 18
+echo -en "|"
+echo -en "Queued jobs"
+mcol 34
+echo -en "|"
+echo -en "Queued nodes"
+echo
+echo "-----------------------------------------------"
+
+echo -en $num_nodes
+mcol 18
+echo -en "|"
+echo -en $jobs_queued
+mcol 34
+echo -en "|"
+echo -en $nodes_queued
+echo

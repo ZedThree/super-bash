@@ -1,0 +1,209 @@
+#!/bin/bash
+#
+# Submit a whole bunch of runs at once
+
+usage="batch_sub -stlrdb [-nhepxyz1]\n\n
+
+Following flags to select type of batch job \n
+	-s submit batch job \n 
+	-t tar runs and send to warwick \n 
+	-l list runs \n 
+	-r restart runs \n
+	-d delete runs \n
+	-b basename of runs \n\n
+
+Following flags for submitting: \n
+	-n number of processors \n
+	-h number of hours \n
+	-e equilibrium file \n
+	-p proffile file \n
+	-x first index \n
+	-y second index \n
+	-z date of runs in format ddMmm \n\n
+
+Use -1 to do dry run"
+
+# Save the command line arguments
+str=''
+for i in  `seq 1 $#`
+do
+    str=${str}":"${!i}
+done
+cla=`echo $str | tr ":" " "`
+
+# Default arguments
+basename= 		
+equname="" 		
+profname="" 		
+N= 			
+SCALE= 			
+date= 			
+
+nproc=128
+hours=1
+
+# Flags for submission script
+flags=
+
+# Need to do getopts twice - once for the submission script, once for the batch commands.
+# The catch-all (*) option for first getopts will wipe all the flags we don't use first time 
+# round. So, keep track of flags needed for second getopts
+str=		
+
+# Get parameters needed to do batch job
+while getopts :n:h:v:b:e:p:x:y:z:stlrd1 OPT; do
+    case $OPT in
+# First set of flags are for submission part
+	n|+n) nproc=$OPTARG
+	    flags="${flags} -n $nproc";;
+	h|+h) hours=$OPTARG
+	    flags="${flags} -h $hours";;
+	v|+v) version=$OPTARG
+	    flags="${flags} -v $version";;
+	e|+e) equname=$OPTARG
+	    # check an equilibrium file has been given
+	    if [[ -z $equname ]]; then
+		echo "Equilbrium file flag used, but no equilibrium file given"
+		echo $usage
+		exit
+	    fi
+	    flags="${flags} -e ${equname}";;
+	p|+p) profname=$OPTARG
+	    # check a profile file has been given
+	    if [[ -z $profname ]]; then
+		echo "Profile file flag used, but no profile file given"
+		echo $usage
+		exit
+	    fi
+	    flags="${flags} -p $profname";;
+# Next set of flags are for batch part
+	b|+b) basename=$OPTARG;;
+	x|+x) N=$OPTARG;;
+	y|+y) SCALE=$OPTARG;;
+	z|+z) date=$OPTARG;;
+# Next set of flags are for batch commands - used in second getopts later
+	s) str=${str}s;;
+	t) str=${str}t;;
+	l) str=${str}l;;
+	r) str=${str}r;;
+	d) str=${str}d;;
+	1) str=${str}"1";;
+# Help and catch-all
+	\? ) echo -e $usage
+	    exit 1;;
+	: ) echo "Option -$OPTARG requires an argument." >&2
+	    echo -e $usage
+	    exit 1;;
+	*) echo -e $usage
+#	    echo "usage: ${0##*/} [+-nhbepxy} [--] ARGS..."
+	    exit 2;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+OPTIND=1
+
+# Make sure basename has been set
+if [[ -z $basename ]]; then
+    echo "Missing basename. "
+    echo -e $usage
+    exit
+fi
+
+# WARNING! Will need to change this part if format of basename/scan is different
+# Make list of filenames
+FILENAME=`for n in $N; do
+    for scale in $SCALE; do
+	echo -n "${basename}_n${n}_scale_${scale} "
+    done
+done`
+
+# Select and run batch job
+while getopts :n:h:b:e:p:x:y:z:stlrd1 OPT "-${str}"; do
+    case $OPT in
+	s|+s)# Submit
+	    echo "submit!"
+	    for filename in $FILENAME
+	    do
+		echo "subnemo -i ${filename} ${flags}"
+		subnemo -i ${filename} ${flags}
+	    done
+	    ;;
+	t|+t)# Tar up jobs and scp them to Warwick
+	    echo "tar!"
+	    # Need to have a file to create tarball in first place
+	    touch fish_food
+	    # Name of tarball - .tgz extension is tar + gzip
+	    tarname=${basename}_${date}.tar
+	    tar -cf ${tarname} fish_food
+	    # Add the input file, hdf5 output and STD_OUT file to tarball
+	    for filename in $FILENAME
+	    do
+		dirname=${filename}_${date}*
+		tar -rvf ${tarname} ${dirname}/input ${dirname}/orb5_res.h5 ${dirname}/hpcff_nemorb_${version}.o
+	    done
+	    rm fish_food
+	    # Show the filesize of the tarball before sending it
+	    ls -Alh ${tarname}
+	    notify-send "ENTER PASSWORD FOR SCP" &
+	    scp ${tarname} phrebb@alya.space.warwick.ac.uk:/storage/space2/phrebb/nemo/runs/$(date +%b%Y)/ && notify-send "Finished scp" || notify-send "scp broke"
+	    ;;
+	r|+r)# Restart
+	    echo "restart!"
+	    for filename in $FILENAME
+	    do
+		dirname=${filename}_${date}*
+		cd ${WORK}/${dirname}
+		sed -i 's/\(nlres[ ]*=[ ]*\)f/\1t/' input
+		msub ${filename}.pbs
+	    done
+	    ;;
+	l|+l)# List directories conforming to the given template
+	    echo "list!"
+	    for filename in $FILENAME
+	    do
+		echo "looking for: " $filename
+		ls | grep ${filename}
+	    done
+	    ;;
+	d|+d)# Delete directories
+	    echo "delete!"
+	    for filename in $FILENAME
+	    do
+		echo ${filename}_${date}*
+		rm -r ${filename}_${date}*
+	    done
+	    ;;
+	1) # Dry run - print out lots of info!
+	    echo "Dry run!"
+	    for filename in $FILENAME
+	    do
+		# List directories/filenames
+		dirname=${filename}_${date}*
+		echo $filename
+		cd ${WORK}/${dirname}
+		pwd
+		# List .pbs files needed for restart and show what would be changed for restart
+		echo -n ".pbs file: "		
+		ls ${filename}.pbs
+		sed -n 's/\(nlres[ ]*=[ ]*\)f/\1t/p' input
+		# How would submission script be called
+		echo "subnemo -i ${filename} ${flags}"
+	    done
+	    ;;
+# Already sorted these above, but need to preserve them from the catch-all
+	n|+n);; 
+	h|+h);;
+	b|+b);;
+	e|+e);;
+	p|+p);;
+	x|+x);;
+	y|+y);;
+	z|+z);;
+	*)
+	    echo $OPTARG
+	    echo -e $usage #"usage: ${0##*/} [+-stlr} [--] ARGS..."
+	    exit 2;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+OPTIND=1

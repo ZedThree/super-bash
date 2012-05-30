@@ -1,0 +1,18 @@
+#!/bin/bash
+no_of_jobs=2
+#define jobname
+name=nonlin_rev_flow
+i=0
+# make a distinct jobname
+j_name=$name"_"$i
+# submit the start job
+echo "msub -N $j_name nonlinear_mast22807_kinetic_electrons_cutoff1_annulus_rev_flow.pbs"
+msub -N $j_name nonlinear_mast22807_kinetic_electrons_cutoff1_annulus_rev_flow.pbs
+while [ $i -le $no_of_jobs ]; do
+    j_prev=$j_name
+    let i=i+1
+    j_name=$name"_"$i
+    echo "msub -N $j_name -W x=depend:afterok:$j_prev nonlinear_mast22807_kinetic_electrons_cutoff1_annulus_rev_flow.pbs"
+    msub -N $j_name -W x=depend:afterok:$j_prev nonlinear_mast22807_kinetic_electrons_cutoff1_annulus_rev_flow.pbs
+done
+

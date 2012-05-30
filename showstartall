@@ -1,0 +1,14 @@
+#! /bin/bash
+
+jobs=`showq | grep "fsggst01" | awk '{print $1}'`
+
+i=0
+
+for n in $jobs
+do
+   qstat -f $n | grep "Job_Name"
+   showstart $n | grep "start"
+   let i=i+1
+done
+
+echo "Total number of jobs queued = "$i

@@ -1,0 +1,72 @@
+#!/bin/bash
+#Script to show information on low priority jobs
+
+#Move to column $1
+function mcol(){
+
+   VAL=${1:-10}
+        tput cub `tput cols`
+        tput cuf ${VAL}
+}
+
+#Colours
+if [ -e ~/bin/.term_colours ]
+then
+   source ~/bin/.term_colours
+fi
+
+#Settings
+TSZ=14
+
+CT=1
+for j in "ID" "Name" "User" "Walltime" "State" "Queue" "Nproc" "Time used"
+do
+  echo -en ${BC_BLUE}${j}${BC_RESET}
+  mcol `calc ${CT}*${TSZ}`
+  CT=`calc ${CT}+1`
+done
+echo ""
+echo "------------------------------------------------------------------------------------------------------------"
+
+for i in `qstat | sort | awk ' $6 ~/low.*/ ' | sed 's/[ \t]/<<_>>/g' `
+do
+  LIN=`echo ${i} | sed 's/<<_>>/ /g'`
+  ID=`echo ${LIN} | awk '{print $1}'`
+  INF=`qstat -f ${ID} | grep "    resources_used.walltime ="`
+  NP=`qstat -f ${ID} | grep "   Resource_List.mppwidth =" | awk '{print $3}'`
+  if [ `echo ${INF} | wc -c` -le 1 ]
+  then
+       EX=""
+  else
+       EX=${BC_GREEN}`echo ${INF} | awk ' {print $3}'`${BC_RESET}
+  fi
+
+  if [ "`echo ${LIN} | awk '{print $3}'`" == "${USER}" ]
+  then
+     echo -en "\033[7;39m"
+     FINCOM="\033[27;39m"
+  fi
+  CT=1
+  ST=""
+  for j in ${LIN} ${NP}
+  do
+      if [ ${CT} -eq 5 ]
+      then
+          if [ "${j}" == "R" ]
+          then
+              COL=${BC_GREEN}
+          else
+              COL=${BC_RED}
+          fi
+      fi
+      ST=${ST}${COL}${j}${BC_RESET}
+      COL=${BC_RESET}
+      ST=${ST}$(mcol `calc ${CT}*${TSZ}`)
+      CT=`calc ${CT}+1`
+  done
+     ST=${ST}${EX}
+     ST=${ST}${FINCOM}
+     echo -e ${ST}
+done
+
+exit 0

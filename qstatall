@@ -1,0 +1,13 @@
+#! /bin/bash
+
+jobs=`showq | grep "fsggst01" | awk '{print $1}'`
+
+i=0
+
+for n in $jobs
+do
+   qstat $n
+   let i=i+1
+done
+
+echo $i

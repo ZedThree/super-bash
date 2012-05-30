@@ -1,0 +1,232 @@
+#!/bin/bash
+#################################################################
+# Check an input file against namelists in a given source code
+# 
+# namelist_check -s SOURCE DIR -i INPUTFILE
+#
+# 	SOURCE DIR - absolute path to source directory
+#	INPUTFILE  - absolute path to input file
+#
+# General plan of action:
+# 	make two sets of arrays: namelists from code, and parameters in input file
+#	compare the two sets of arrays
+#	if some parameters don't appear in the namelists, say what they are
+#
+# v2 - Commandline options for sourcedir and inputfile
+#    - Can probably handle namelists defined in several files (not checked)
+#    - Rudimentary error handling
+#
+# v1 - Currently no form of error handling
+#    - Input file hard coded
+#    - Relies on namelists all being in one file in code
+#
+# Peter Hill 2011
+# Feel free to distribute, but please keep this attribution
+#################################################################
+
+source_loc=
+input_loc=
+
+usage=" namelist_check -s SOURCE DIR -i INPUTFILE
+
+ 	SOURCE DIR - absolute path to source directory
+	INPUTFILE  - absolute path to input file
+"
+
+while getopts :s:i: OPT; do
+    case $OPT in
+	s|+s) # Source location
+	    source_loc="$OPTARG"
+	    ;;
+	i|+i) # Input file location
+	    input_loc="$OPTARG"
+	    ;;
+	*)
+	    echo $usage
+	    exit 2
+    esac
+done
+shift $(( OPTIND - 1 ))
+OPTIND=1
+
+if [[ -z $source_loc ]]
+then
+    echo "No source given"
+    echo "$usage"
+    exit
+fi
+if [[ -z $input_loc ]]
+then
+    echo "No input file given"
+    echo "$usage"
+    exit
+fi
+
+#################################################################
+# Make a file with namelists on individual lines
+
+# Go to source dir
+cd $source_loc
+
+# Temp files
+nml_working_tot=`mktemp`
+
+# Find where the namelists are
+nml_file=`grep -i -l -E "namelist /[a-zA-Z_]*/" *`
+
+# Check if there are any results!
+if [[ -z  $nml_file ]]
+then
+    echo "No namelists found! Check source"
+    echo "$source_loc"
+fi
+
+# Loop over results of grep
+i=0
+for i_file in $nml_file
+do
+# Temp files
+    nml_working[$i]=`mktemp`
+    nml_working2[$i]=`mktemp`
+# Make a new file so we don't screw up original if it all goes terribly wrong
+# Probably relies on namelists only being in one file
+    cp $i_file ${nml_working[$i]}
+
+# Put multi-line FORTRAN statements onto one line
+    while grep -q -E "&$" ${nml_working[$i]}
+    do
+	sed -i '
+    # look for FORTRAN line continuation characters (plus trailing whitespace)
+    /&[ \t]*$/ {
+    # read in next line
+	N
+    # delete new line and FORTRAN &
+    	s/&[ \t]*\n//g
+    }' ${nml_working[$i]}
+    done
+
+# Get just the namelists out
+    grep -i -E "namelist /[a-zA-Z_]*/" ${nml_working[$i]} > ${nml_working2[$i]}
+
+# Clean up file
+# Remove forward slashes and commas from namelist names and put everything in lower case
+    cat ${nml_working2[$i]} | tr '!,/' ' ' | tr '[:upper:]' '[:lower:]' > ${nml_working[$i]}
+# Remove leading word "NAMELIST"
+    sed -i "s/namelist//" ${nml_working[$i]}
+# Get rid of multiple spaces
+    sed -i "s/  */ /g" ${nml_working[$i]}
+
+# Put all namelists into one file
+    cat ${nml_working[$i]} >> $nml_working_tot
+    let i+=1
+done
+i=0
+
+# List of namelists and their parameters in code
+for index in `cat $nml_working_tot | awk '{print NR'}`
+do
+    code_nml[$index]=`cat $nml_working_tot | awk 'NR=='$index' {print $1}'`
+    code_para[$index]=`cat $nml_working_tot | awk 'NR=='$index' {print $0}'`
+done
+code_nml_arr=${code_nml[@]}
+#echo $code_nml_arr	# uncomment for sanity check
+
+#################################################################
+# Make a similar file for the input file
+
+# Temp file
+inputbak=`mktemp`
+inputbak2=`mktemp` 
+
+# Prep input file
+cp $input_loc $inputbak
+cat $inputbak | tr '=' ' ' > $inputbak2
+
+
+# Remove preamble
+if [[ $(head -1 $inputbak2 | grep -o -E "^/") != '/' ]]
+then
+    sed -i '1,/\// d' $inputbak2
+fi
+
+# Get namelist names and input variables from input file
+cat $inputbak2 | awk '{print $1'} > $inputbak
+
+# Put namelists onto one line
+cat $inputbak | tr '\n\r' ' ' > $inputbak2
+
+# Make sure each namelist is on its own line
+cat $inputbak2 | tr '&' '\n' > $inputbak
+
+# Clean up file: get rid of stray punctuation, switch to lower case
+cat $inputbak | tr -d '!/,' > $inputbak2
+cat $inputbak2 | tr '[:upper:]' '[:lower:]' > $inputbak
+
+# List of namelists and their parameters in input file
+for index in `cat $inputbak | awk '{print NR'}`
+do
+    input_nml[$index]=`cat $inputbak | awk 'NR=='$index' {print $1}'`
+    input_para[$index]=`cat $inputbak | awk 'NR=='$index' {print $0}'`
+done
+input_nml_arr=${input_nml[@]}
+#echo $input_nml_arr	# uncomment for sanity check
+#echo ${input_para[@]}
+#################################################################
+# Snippet to compare two arrays
+# Stolen (30 Aug 2011) from http://stackoverflow.com/questions/2312762/compare-difference-of-two-arrays-in-bash/2315541#2315541
+# Credit to ghostdog74
+arr_comp(){
+    a1="$1"
+    a2="$2"
+    awk -va1="$a1" -va2="$a2" '
+     BEGIN{
+       m= split(a1, A1," ")
+       n= split(a2, t," ")
+       for(i=1;i<=n;i++) { A2[t[i]] }
+       for (i=1;i<=m;i++){
+            if( ! (A1[i] in A2)  ){
+                printf A1[i]" "
+            }
+        }
+    }'
+}
+#################################################################
+# Compare the two arrays
+
+# Compare namelists
+nml_comp=( $(arr_comp "$input_nml_arr" "$code_nml_arr") )
+if [[ -z ${nml_comp[@]} ]]
+then
+    echo "Namelists all correct!"
+else
+    echo "Following namelists not in code: ${nml_comp[@]}"
+fi
+
+# Loop over input namelists
+for index in `seq ${#input_nml[@]}`
+do
+    # Clean comparision variable
+    para_comp=
+    # Find right code namelist
+    for index2 in `seq ${#code_nml[@]}`
+    do
+	if [[ "${input_nml[$index]}" = "${code_nml[$index2]}" ]]
+	then
+	    # Compare input parameters to those in code namelist
+	    input_para_temp=${input_para[$index]}
+	    code_para_temp=${code_para[$index2]}
+	    para_comp=( $(arr_comp "$input_para_temp" "$code_para_temp" ) )
+	    if [[ -z ${para_comp[@]} ]]
+	    then
+		echo "Namelist ${input_nml[$index]} is correct"
+	    else
+		echo "Following input parameters in namelist ${input_nml[$index]} are not in code: ${para_comp[@]}"
+	    fi
+	fi
+    done
+done
+
+# Clean up tempory files
+rm ${nml_working[@]}  ${nml_working2[@]} $nml_working_tot $inputbak $inputbak2
+
+# Last line

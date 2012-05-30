@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# Tar up the latest dir into its own archive
+
+# Today's date
+date=$(date +%d%b_%I)
+# Filename of latest dir
+latest=`ls -tc | head -1`
+# A short name for the archive
+shortname=$(echo ${latest} | head -c 20)_${date}.tar
+
+tar -cvf $shortname ${latest}/input ${latest}/orb5_res.h5 ${latest}/hpcff*.o
+
+

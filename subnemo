@@ -1,0 +1,172 @@
+#!/bin/bash
+# Usage: subnemo -i inputfile [-n nproc] [-v version] [-h walltime]
+#	where inputfile is an existing ORB5 input file
+#	sumbits a parallel ORB5 job using a pbs script
+#
+##############################################################
+# ORB5 Submission script for hpc-ff                          #
+# Peter Hill                                                 #
+# Cribbed heavily from SCORB5 script at Culham               #
+##############################################################
+
+usage="usage: subnemo -i inputfile [-e equfile] [-p proffile] [-n nproc] [-v version] [-h walltime]"
+
+# default arguments
+nproc=8
+binversion=nemorb
+version=trunk
+debug=
+hours=1
+infile=
+equfile=
+proffile=
+minutes='00'
+
+# get the flags and their options
+while getopts ":i::e::p::n::m::v::h::b:" options; do
+  case $options in
+    i ) infile=$OPTARG;;
+    e ) equfile=$OPTARG
+	  # check an equilibrium file has been given
+	  if [[ -z $equfile ]]; then
+	      echo "Equilbrium file flag used, but no equilibrium file given"
+	      echo $usage
+	      exit
+	  fi;;
+    p ) proffile=$OPTARG
+	  # check a profile file has been given
+	  if [[ -z $proffile ]]; then
+	      echo "Profile file flag used, but no profile file given"
+	      echo $usage
+	      exit
+	  fi;;
+    n ) nproc=$OPTARG;;
+    v ) version=$OPTARG;;
+    b ) binversion=$OPTARG;;  
+    h ) hours=$OPTARG;;
+    m ) minutes=$OPTARG;;
+    \? ) echo $usage
+         exit 1;;
+    * ) echo $usage
+          exit 1;;
+    : ) echo "Option -$OPTARG requires an argument." >&2
+        echo $usage
+	  exit 1;;
+  esac
+done
+
+# set number of nodes - 8 cores per node
+let "nnodes=$nproc / 8"
+echo "Number of nodes = $nnodes"
+
+# make sure there's an input file specified
+if [[ -z $infile ]]; then
+    echo $usage
+    exit
+fi
+
+# directories and names
+orbdir=${HOME}/nemo/${version}              # where orb5 is
+workdir=${WORK}				    # where to save stuff
+inputdir=${orbdir}/input                    # where to look for input
+bindir=${orbdir}/bin                        # where is binary? here is binary.
+equdir=${orbdir}/equil			    # git me some equilibrium files
+profdir=${orbdir}/profs                     # look here for profile files
+binname=hpcff_${binversion}		    # name of binary
+date=$(date +_%d%B%Y_%T)                    # um, today's date?
+name_date=${infile}$date                    # input file name + date
+datadir=$name_date                          # directory to save data in
+
+# make sure specified input file exists
+if [ ! -e ${inputdir}/$infile ]; then
+    echo "Cannot find input file. Looking in $inputdir."
+    exit
+fi
+
+# make directory for this run
+cd $workdir
+mkdir $datadir
+cd $workdir/$datadir
+
+# move stuff to run directory, make log files
+cp $inputdir/$infile ./$infile
+cp ${bindir}/version ./version
+orb5log=$name_date.log
+tmp=$name_date.tmp
+touch $orb5log
+touch $tmp
+cp $infile ./input
+
+# Automatic retrieval of equ/prof files
+if [[ -z "$equfile" ]] ; then
+    echo "Automatic retrieval of equilibrium file"
+    equfile=`sed -n 's/^[^!][ ]*fname[ ]*=[ ]*\"\([a-zA-Z0-9_]*\)\"/\1/p' input`
+    if [[ -n "$equfile" ]] ; then
+        echo "Found " $equfile " in input file"
+    fi
+fi
+if [[ -z "$proffile" ]] ; then
+    echo "Automatic retrieval of profile file"
+    proffile=`sed -n 's/^[^!][ ]*prof_file[ ]*=[ ]*\"\([a-zA-Z0-9_]*\)\"/\1/p' input`
+    if [[ -n "$proffile" ]] ; then
+        echo "Found " $proffile " in input file"
+    fi
+fi
+
+# if equilibrium/profile file(s) have been specified, then check that they exist and copy them to run dir
+if [[ -n "$equfile" ]]; then
+    if [[ -e ${equdir}/${equfile}.equ_h5 ]]; then
+	cp ${equdir}/${equfile}.equ_h5 ./$equfile
+    else
+	echo "Equilibrium file, ${equfile}, not found. Looking in ${equdir}"
+	exit 3
+    fi
+fi
+if [[ -n "$proffile" ]]; then
+    if [[ -e ${profdir}/${proffile}.h5 ]]; then
+	cp ${profdir}/${proffile}.h5 ./$proffile
+    else
+	echo "Profile file, ${proffile}, not found. Looking in ${proffile}"
+	exit 4
+    fi
+fi
+#cp -r $orbdir/src/ ./
+
+# folders for restart files
+mkdir dat0
+mkdir dat1
+mkdir tkopti
+
+echo "Starting orb5 (version: $version) with input file: $infile, $nproc processes. Started at $date." > $orb5log
+
+# Generate .pbs script
+pbs=$infile.pbs
+touch $pbs
+
+echo "#!/bin/bash -x
+#MSUB -l nodes=$nnodes:ppn=8
+#MSUB -l walltime=$hours:$minutes:00
+#MSUB -e 
+#      if keyword omitted : default is submitting directory
+#MSUB -o 
+#      if keyword omitted : default is submitting directory
+#MSUB -M zed.three@gmail.com
+#      official mail address
+#MSUB -m e
+#      send mail: never, on abort, beginning or end of job 
+#MSUB -N $infile
+
+# default mpi module causes crash
+module unload parastation/mpi2-intel-5.0.26-1
+module load parastation/mpi2-intel-5.0.23-1
+
+echo \$PBS_O_WORKDIR
+cd \$PBS_O_WORKDIR
+mpiexec -np $nproc ${bindir}/$binname 1>$workdir/$datadir/${binname}_${version}.o 2>$workdir/$datadir/${binname}_${version}.e" > $pbs
+
+# submit job
+msub $pbs
+echo "Submitted $workdir/$datadir/$pbs at $(date +%T) with pid $!." >> $orb5log
+
+# make a copy of input file in $inputdir, so we have a nice history of submitted jobs
+cp ./$infile $inputdir/$name_date

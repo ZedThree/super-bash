@@ -1,0 +1,22 @@
+#!/bin/bash
+
+#A simple script to do floating point maths
+#Author: David Dickinson
+#Date: 22/06/2010
+
+#Define expected number of arguements
+EXPECTED_ARGS=1
+
+#Check we get sufficient parameters
+if [ ! $# -eq $EXPECTED_ARGS ]
+then
+       echo "Error: recieved "$#" args when expected exactly
+"$EXPECTED_ARGS
+       echo $0 "usage: "$0" calculation"
+       exit 1
+fi
+
+#ECHO calculation to bc and make sure normal formatting used!
+echo "scale=8; $1" | bc | sed 's/\-\./\-0\./g' | sed 's/^\./0./g'
+
+exit 0
