@@ -1,0 +1,48 @@
+#!/bin/bash
+#Function to replace an assignement value with a token string
+function token_assignement(){
+    #VNAME is variable name to replace
+    #FNAME is file name to make substitution in
+    #TOKEN is number of token to use (not string)
+    #INSTANCE is number of the instance to replace, defaults to 1. If this is less then one then loop
+    #over all matches
+
+    #Set locals based on input
+    local  VNAME=${1}
+    local  FNAME=${2}
+    local  TOKEN=${3}
+    local  INSTANCE=${4:-1}
+
+    #Set local constants
+    local TOK_STRING="VAR_REPLACE_"
+    
+    #Get the number of matches
+    local NMATCH=`grep -n -E "^ *""${VNAME}"" *= *" ${FNAME} | wc -l`
+
+    #Now get the line number of instance matching VNAME assignment
+    local LN_NUM=`grep -n -E "^ *""${VNAME}"" *= *" ${FNAME} | head -n ${INSTANCE} | tail -n 1 | awk -F ':' '{print $1}'`
+    
+    #If more than one match see if we pick specific value or do all
+    local COUNT=0
+    if [ ${NMATCH} -gt 1 ]
+    then
+	if [ ${INSTANCE} -lt 0 ]
+	then
+	    for i in `grep -n -E "^ *""${VNAME}"" *= *" ${FNAME} | awk -F ':' '{print $1}'`
+	    do
+		local LIN[${COUNT}]=${i}
+		COUNT=`calc ${COUNT}+1`
+	    done
+	else
+	    local LIN[${COUNT}]=${LN_NUM}
+	fi
+    else
+	local LIN[${COUNT}]=${LN_NUM}
+    fi
+
+    #Now replace string to left of value with assigment and token in desired lines
+    for LINNUM in ${LIN[@]}
+    do
+	sed --in-place  ''"${LINNUM}"' s/^\( *'"${VNAME}"' *\= *\)\(.*\)$/\1'"${TOK_STRING}""${TOKEN}"' ! \2/g' ${FNAME}
+    done
+}
