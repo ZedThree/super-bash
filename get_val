@@ -1,0 +1,28 @@
+#!/bin/bash
+#Function to return the value of a specified parameter in an assignement
+#statement
+#Assumes value is numeric
+#Get value of variable from line in file matching NAME = VAL !may have comment 
+function get_val(){
+    #VNAME if the variable name to find
+    #FNAME is the file to search
+    #INSTANCE is the number of the instance to show, defaults to 1
+    
+    #Set locals based on args
+    local  VNAME=${1}
+    local  FNAME=${2}
+    local  INSTANCE=${3:-1}
+
+    #Find value from file
+    #Matches pattern | Gets bit after = | Gets bit before ! | removes blanks | prints INSTANCE match.
+    local VAL=$(grep -i -E "^ *""${VNAME}"" *= *" ${FNAME} | awk -F'=' '{print $2}' | awk -F'!' '{print $1}' | sed 's/[ \t\n]*//g' | head -n ${INSTANCE} | tail -n 1)
+
+    #If string is numeric then use calc to do formatting, should probably just
+    #echo the value and allow the user to decide about formatting.
+    if [ `echo ${VAL} | grep -v -E "^[0-9.eEdD+-]+$" | wc -l` -eq 0 ]
+    then
+	calc 1*${VAL}
+    else
+	echo ${VAL}
+    fi
+}

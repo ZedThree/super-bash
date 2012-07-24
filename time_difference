@@ -1,0 +1,134 @@
+#!/bin/bash
+#A script to find the time difference between two HH:MM:SS formatted
+#times
+
+#Check inputs
+if [ $# -gt 3 ]
+then
+   echo "$0 wants 2 or 3 arguments"
+   exit 1
+fi
+
+#Set times to use
+T1=${1:-"00:00:00"}
+T2=${2:-"00:00:00"}
+
+#Count : in times
+NT1=`echo ${T1} | awk -F":" '{print NF}'`
+NT2=`echo ${T2} | awk -F":" '{print NF}'`
+
+#If no colons then assume we have been passed seconds so convert to time
+if [ ${NT1} -eq 0 ]
+then
+    T1=`seconds_to_time ${T1}`
+    NT1=`echo ${T1} | awk -F":" '{print NF}'`
+fi
+if [ ${NT2} -eq 0 ]
+then
+    T2=`seconds_to_time ${T2}`
+    NT2=`echo ${T2} | awk -F":" '{print NF}'`
+fi
+
+#Pad start if not passed a full time
+if [ ${NT1} -lt 3 ]
+then
+    diff=$((3-${NT1}))
+    for j in ` seq ${diff}`
+    do
+	T1="00:"${T1}
+    done
+fi
+
+if [ ${NT2} -lt 3 ]
+then
+    diff=$((3-${NT2}))
+    for j in ` seq ${diff}`
+    do
+	T2="00:"${T2}
+    done
+fi
+T1="00"${T1}
+T2="00"${T2}
+
+#Set symbol to use
+SYM=${3:-"-"}
+
+#Validate symbol
+VALIDSYM=0
+VSYMS=( "-" "+" "m" ) #Array of allowed symbols
+for i in ${VSYMS[@]}
+do
+    if [ "${SYM}" == "${i}" ]
+    then
+	VALIDSYM=1
+	break 
+    fi
+done
+
+if [ "${SYM}" == "m" ]
+then
+    SYM="*"
+fi
+
+if [ ${VALIDSYM} -eq 0 ]
+then
+    echo "Error: Invalid operation symbol '${SYM}'"
+    exit 1
+fi
+
+#Get hours minutes and seconds
+h1=`echo $T1|cut -d: -f1`
+m1=`echo $T1|cut -d: -f2`
+s1=`echo $T1|cut -d: -f3`
+
+h2=`echo $T2|cut -d: -f1`
+m2=`echo $T2|cut -d: -f2`
+s2=`echo $T2|cut -d: -f3`
+
+#Get total number of seconds
+x1=$(($h1*3600+$m1*60+$s1))
+x2=$(($h2*3600+$m2*60+$s2))
+
+#This makes sure we take the absolute time difference
+#if test $x1 -lt $x2
+#then
+#    diff=`calc "$x2 ${SYM} $x1"`
+#else
+    diff=`calc "$x1 ${SYM} $x2"`
+#fi
+
+#Now convert back into hh:mm:ss format and print
+secs=`echo ${diff} | awk -F "." '{print $1}'`
+h=$(( secs / 3600 ))
+m=$(( ( secs / 60 ) % 60 ))
+s=$(( secs % 60 ))
+#h=`calc floor(${secs}/3600)`
+MINUS=-1
+if [ ${h} -lt 0 ]
+then
+    h=$((-1*${h}))
+    MINUS=1 #`calc -1*${MINUS}`
+fi
+
+if [ ${m} -lt 0 ]
+then
+    m=$((-1*${m}))
+    MINUS=1 #`calc -1*${MINUS}`
+fi
+
+if [ ${s} -lt 0 ]
+then
+    s=$((-1*${s}))
+    MINUS=1 #`calc -1*${MINUS}`
+fi
+
+#Add minus sign
+if [ ${MINUS} -eq 1 ]
+then
+    echo -en "-"
+fi
+
+FSTR="%02d:%02d:%02d\n"
+printf ${FSTR} ${h} ${m} ${s}
+
+exit 0

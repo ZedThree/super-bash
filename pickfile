@@ -1,0 +1,40 @@
+#!/bin/bash
+#Defines a pickfile function
+#WARNING: Assumes there is no whitespace in the file names
+function pickfile(){
+    local FILES=${1:-"*"}
+    local __result=${2:-PICKFILECHOICE}
+    local CT=0
+    local NF=`echo ${FILES} | tr " " "\n" | wc -l`
+
+    #Default answer
+    eval $__result=""
+
+    #Did we find any matches
+    if [ ${NF} -eq 0 ]
+    then
+	echo "Error in pickfile: No matches found" > /dev/stderr
+    #Only one match
+    elif [ ${NF} -eq 1 ]
+    then
+	eval $__result=${FILES}
+    else
+	for i in `echo ${FILES} | tr " " "\n"`
+	do
+	    CT=$(($CT+1))
+	    echo ${CT}"   "${i}
+	done
+
+        #Read option
+	read -p "Please pick a file by number: " CHOICE
+
+        #Check answer
+	if [ ${CHOICE} -gt ${CT} ]
+	then
+	    echo "Error in pickfile: Invalid selection" > /dev/stderr
+	fi
+	
+        #Set return variable
+	eval $__result=`echo ${FILES} | tr " " "\n" | head -n ${CHOICE} | tail -n 1`
+    fi
+}
