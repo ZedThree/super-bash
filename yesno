@@ -1,0 +1,19 @@
+#!/bin/bash
+#Defines a function to get yes or no answers
+
+function yesno(){
+    local PROMPT=${1:-"Yes or no? "}
+    local __result=${2:-CHOICE}	
+    read -p ${PROMPT} ANS
+    case ${ANS} in
+	[yY1] | [yY][Ee][Ss])
+	    ANS=1
+	    ;;
+	*)
+	    ANS=0
+	    ;;
+    esac
+
+    #Set return variable
+    eval $__result=${ANS}
+}

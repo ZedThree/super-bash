@@ -1,0 +1,312 @@
+#!/bin/bash
+#A script to create a run directory, defaults suited for gs2
+#Author: David Dickinson
+
+################################################
+#Settings and default definitions
+################################################
+
+#//Executable
+EXE_DEFAULT=~/bin/gs2
+#//Directory name
+PATH_DEF_PRE=GS2RUN
+#//Executable target name
+TARG_EXE_DEF="gs2"
+#//Variable replacement token
+VARTOKDEF="VAR_REPLACE_"
+
+################################################
+#Load in other functions
+################################################
+
+source ~/bin/pickfile
+source ~/bin/errmesg
+source ~/bin/warnmesg
+source ~/bin/yesno
+
+################################################
+#Options and usage
+################################################
+
+usage()
+{
+cat <<EOF
+usage: $0 Options
+This script makes an execution directory (defaults are gs2 specific).
+
+OPTIONS:
+   -h           Show this message
+   -e <VAL>     Path to executable to use. Defaults to ${EXE_DEFAULT}
+   -d <VAL>     Directory name/path+name. Defaults to ${PATH_DEF_PRE}_<DATE+TIME>
+   -i <VAL>     Input file to use. If not set then will search current directory for *.in files
+   -n <VAL>     Executable target name. Defaults to gs2.
+   -V <VAL>     Variable replacement token. Defaults to VAR_REPLACE_ . Note assumes tokens are numbered
+                sequentially starting at 1 (e.g. VAR_REPLACE_1, VAR_REPLACE_2 etc.)
+   -v <VAL>     Comma separated list of variables to use as replacement values.
+   -s <VAL>     Submission script to copy into directory.
+   -t           Dryrun mode, only print information don't actually do anything.
+   -a           Append date to directory
+EOF
+}
+
+################################################
+#Initialise variables
+################################################
+
+APPEND_DATE=0
+EXE=${EXE_DEFAULT}
+DIR=${PATH_DEF_PRE}
+TARG_EXE=${TARG_EXE_DEF}
+VARTOK=${VARTOKDEF}
+
+NOVARS=1
+DIR_SPEC=0
+OVERWRITE=-1
+DRYRUN=0
+
+################################################
+#Update variables based on options
+################################################
+
+while getopts “hae:d:i:n:tV:v:s:” OPTIONS
+do
+     case $OPTIONS in         
+	 h)                #Usage
+             usage             
+	     exit 1
+             ;;
+	 a)                #Append date to directory?
+	     APPEND_DATE=1
+	     ;;
+         e)                #Executable
+	     EXE=${OPTARG}
+	     ;;
+	 d)                #Directory name
+	     DIR_SPEC=1
+             DIR=${OPTARG}
+             ;;
+	 i)                #Input file name
+	     INP_FILE=${OPTARG}
+	     ;;
+	 n)                #Executable target name
+	     TARG_EXE=${OPTARG}
+	     ;;
+	 s)                #Submission script
+	     SUBFILE=${OPTARG}
+	     ;;
+	 t)                #Dryrun mode
+	     DRYRUN=1
+	     ;;
+	 V)
+	     VARTOK=${OPTARG}
+	     ;;
+	 v)
+	     NOVARS=0
+	     VARVALS=${OPTARG}
+	     ;;
+	 *)
+             usage
+             exit 1
+             ;;
+     esac
+done
+
+################################################
+#Post update check/set extra variables
+################################################
+
+#//Did we specify the directory?
+if [ ${DIR_SPEC} -eq 0 ]
+then
+    APPEND_DATE=1
+fi
+
+#//Did we specify an input file? If not try to find one
+if [ "${INP_FILE}" == "" ]
+then
+    #Search for matching files
+    INPLST=`ls *.in 2>/dev/null | wc -l`
+
+    #Handle cases
+    if [ ${INPLST} -eq 1 ]     #Only one option
+    then
+	INP_FILE=`ls *.in`
+    elif [ ${INPLST} -eq 0 ]   #No options
+    then 
+	errmesg "No input file specified and none found."
+	exit 1
+    else                       #Several options
+	pickfile "*.in" INP_FILE
+	if [ "${INP_FILE}" == "" ]
+	then
+	    errmesg "No input file selected."
+	    exit 1
+	fi
+    fi
+fi
+
+#//Variables to array
+if [ ${NOVARS} -eq 0 ]
+then
+    VARS=(`echo $VARVALS | tr "," "\n"`)
+    NVAR=${#VARS[@]}
+fi
+
+#//Get input file base name
+INP_BASE=`basename ${INP_FILE}`
+
+#//Do we want to append date? If so do it
+if [ ${APPEND_DATE} -eq 1 ]
+then
+    #Get date/time string (day,month,year,hour,minute,second,nanosecond)
+    DTSTR=`date +"_%d_%m_%y_AT_%H_%M_%S_%N"`
+
+    #Update directory name
+    DIR=${DIR}${DTSTR}
+fi
+
+################################################
+#Validation
+################################################
+#Directory exists already?
+if [ -e ${DIR} ]
+then
+    warnmesg "Directory '${DIR}' already exists."
+    yesno "Overwrite? " OVERWRITE
+    if [ ${OVERWRITE} -eq 0 ]
+    then
+	warnmesg "Not overwriting so quit."
+	exit 1
+    fi
+fi
+
+#Executable exists?
+if [ ! -e ${EXE} ]
+then
+    errmesg "Executable '${EXE}' does not exist."
+    exit 1
+fi
+
+#Input file exists?
+if [ ! -e ${INP_FILE} ]
+then
+    errmesg "Input file '${INP_FILE}' does not exist."
+    exit 1
+fi
+
+#Submission script
+if [ ! "${SUBFILE}" == "" ]
+then
+    if [ ! -e ${SUBSCRIPT} ]
+    then
+	errmesg "Submission script '${SUBFILE}' does not exist."
+	exit 1
+    fi
+fi
+
+################################################
+#//Now make directory copy files etc.
+################################################
+if [ ${DRYRUN} -eq 0 ]
+then
+    #Make directory
+    if [ ! ${OVERWRITE} -eq 1 ]
+    then
+	mkdir ${DIR}
+    fi
+
+    #Copy input file
+    cp ${INP_FILE} ${DIR}
+    
+    #Link executable
+    if [ ! ${OVERWRITE} -eq 1 ]
+    then
+	ln -s ${EXE} ${DIR}/${TARG_EXE}
+    else
+	ln -sf ${EXE} ${DIR}/${TARG_EXE}
+    fi
+
+    #Copy submission script
+    if [ ! "${SUBFILE}" == "" ]
+    then
+	cp ${SUBFILE} ${DIR}/
+    fi
+else
+    echo -e "Directory  :\t"${DIR}
+    echo -e "Input file :\t"${INP_FILE}
+    echo -e "Executable :\t"${EXE}
+    echo -e "Target     :\t"${TARG_EXE}
+    if [ ! "${SUBFILE}" == "" ]
+    then
+	echo -e "Submission :\t"${SUBFILE}
+    fi
+fi
+
+################################################
+#//Now onto the variable replacement part
+################################################
+if [ ${NOVARS} -eq 0 ]
+then
+    if [ ! ${DRYRUN} -eq 1 ]
+    then
+        #Get current location
+        CUR=`pwd`
+    
+        #Move into directory
+        cd ${DIR}
+    fi
+
+    #Find number variables to replace in input file
+    NFVAR=`grep -E "${VARTOK}[0-9]+" ${INP_FILE} | sed 's/.*\('"${VARTOK}"'[0-9]\+\).*/\1/g' | sort -u | wc -l`
+
+    #Check if this matches our expectations
+    if [ ${NFVAR} -gt ${NVAR} ]
+    then
+	errmesg "Too many tokens in ${INP_FILE} (${NFVAR}). Only passed ${NVAR} values."
+	#Remove directory if required
+	if [ ! ${DRYRUN} -eq 1 ]
+	then
+	    if [ ! ${OVERWRITE} -eq 1 ]
+	    then
+		rm -rf ${DIR}
+	    fi
+	fi
+	exit 1
+    elif [ ${NFVAR} -lt ${NVAR} ]
+    then
+	warnmesg "More variables passed (${NVAR}) than tokens (${NFVAR})"
+    fi
+
+    #Now can loop over variables and do replacement
+    if [ ${DRYRUN} -eq 1 ]
+    then
+	echo -e "Token replacements:"
+    fi
+    for i in `seq 1 ${NFVAR}`
+    do
+        #Token string
+	VARSTR=${VARTOK}${i}
+	
+        #Get variable value
+	VARVAL=${VARS[$((${i}-1))]}
+    
+        #Replace string
+	if [ ! ${DRYRUN} -eq 1 ]
+	then
+	    sed --in-place 's/\b'"${VARSTR}"'\b/'"${VARVAL}"'/g' ${INP_BASE}
+	else
+	    echo -e "\tToken ${i} : String ${VARSTR} : ${VARVAL}"
+	fi
+    done
+
+    if [ ! ${DRYRUN} -eq 1 ]
+    then
+        #Move backwards
+	cd ${CUR}
+    fi
+fi
+    
+################################################
+#//Finish off
+################################################
+exit 0

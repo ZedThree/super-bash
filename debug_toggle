@@ -1,0 +1,88 @@
+#!/bin/bash
+#A script to toggle the debug flags used in fortran source code
+
+#Options and usage
+usage()
+{
+cat <<EOF
+usage: $0 Options
+This script toggles specially formatted debug statments in fortran source code. 
+Assumes long form of logical variables used (i.e. .FALSE. and .TRUE.)
+
+OPTIONS:
+   -h           Show this message
+   -f           Force all flags off
+   -n           Force all flags on
+   -t           Toggle the flags (default)
+   -v <VAL>     Sets name of debug variable (defaults to debug)
+   -i <VAL>     Quoted string for file pattern upon which to apply toggle. Defaults to "*.f??"
+EOF
+}
+
+#GLOBALS
+DO_ON=0
+DO_OFF=1
+DO_TOG=2
+DEBUG_VAR="debug"
+FILE_PAT="*.f??"
+
+#/Defaults
+MODE=${DO_TOG}
+
+while getopts “hfntv:i:” OPTIONS
+do
+     case $OPTIONS in         
+	 h)
+             usage             
+	     exit 0
+             ;;
+         n)
+	     MODE=${DO_ON}
+             ;;
+         t)
+	     MODE=${DO_TOG}
+             ;;
+         f)
+             MODE=${DO_OFF}
+             ;;
+	 v)
+	     DEBUG_VAR=${OPTARG}
+	     ;;
+	 i)
+	     FILE_PAT="${OPTARG}"
+	     ;;
+         *)
+             usage
+             exit 1
+             ;;
+     esac
+done
+
+
+#/Do the replacing in all matching files
+for i in `ls ${FILE_PAT}`
+do
+    case ${MODE} in
+	${DO_TOG})
+             sed --in-place 's/\b'"${DEBUG_VAR}"'\b\([ ]*\)=\([ ]*\).false.\(.*\)$/'"${DEBUG_VAR}"'\1=\2 VAR_REPLACE_T !.false./gI' ${i}
+             sed --in-place 's/\b'"${DEBUG_VAR}"'\b\( *\)=\( *\)\.true\.\(.*\)$/'"${DEBUG_VAR}"'\1=\2VAR_REPLACE_F !.true./gI' ${i}
+             sed --in-place 's/VAR_REPLACE_T/.true./gI' ${i}
+             sed --in-place 's/VAR_REPLACE_F/.false./gI' ${i}
+	     ;;
+	${DO_ON})
+             sed --in-place 's/\b'"${DEBUG_VAR}"'\b\( *\)=\( *\)\.false\.\(.*\)$/'"${DEBUG_VAR}"'\1=\2.true. !.false./gI' ${i}
+	     ;;
+	${DO_OFF})
+             sed --in-place 's/\b'"${DEBUG_VAR}"'\b\( *\)=\( *\)\.true\.\(.*\)$/'"${DEBUG_VAR}"'\1=\2.false. !.true./gI' ${i}
+	     ;;
+	*)
+	    #Should never get here
+	    echo "Error: Invalid value of MODE (${MODE})"
+	    exit 1
+	    ;;
+    esac
+done
+
+#/Done!
+#echo "Done!"
+exit 0
