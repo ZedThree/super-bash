@@ -1,0 +1,16 @@
+#!/bin/bash
+#Defines a function to return an absolute path from a relative path
+source ~/bin/errmesg
+function rel2abs(){
+    local RELPATH=${1}
+    local __result=${2:-REL2ABS_RES}	
+
+    local DNM=`dirname ${RELPATH}`
+    local BNM=`basename ${RELPATH}`
+
+    #Get path name
+    ANS=`cd ${DNM} 2>/dev/null && { echo $(pwd)/${BNM} ; cd - >/dev/null ; } || { errmesg "Can't change path to ${DNM} " ; exit 1 ; }`
+
+    #Set return variable
+    eval $__result=${ANS}
+}

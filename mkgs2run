@@ -1,5 +1,5 @@
 #!/bin/bash
-#A script to create a run directory, defaults suited for gs2
+#A script to create a gs2 run directory
 #Author: David Dickinson
 
 ################################################
@@ -23,6 +23,7 @@ source ~/bin/pickfile
 source ~/bin/errmesg
 source ~/bin/warnmesg
 source ~/bin/yesno
+source ~/bin/rel2abs
 
 ################################################
 #Options and usage
@@ -37,9 +38,10 @@ This script makes an execution directory (defaults are gs2 specific).
 OPTIONS:
    -h           Show this message
    -e <VAL>     Path to executable to use. Defaults to ${EXE_DEFAULT}
+   -E <VAL>     Executable target name. Defaults to gs2.
    -d <VAL>     Directory name/path+name. Defaults to ${PATH_DEF_PRE}_<DATE+TIME>
    -i <VAL>     Input file to use. If not set then will search current directory for *.in files
-   -n <VAL>     Executable target name. Defaults to gs2.
+   -I <VAL>     Name of input file target (i.e. what it will be called when it's copied, defaults to input file name)
    -V <VAL>     Variable replacement token. Defaults to VAR_REPLACE_ . Note assumes tokens are numbered
                 sequentially starting at 1 (e.g. VAR_REPLACE_1, VAR_REPLACE_2 etc.)
    -v <VAL>     Comma separated list of variables to use as replacement values.
@@ -59,6 +61,7 @@ DIR=${PATH_DEF_PRE}
 TARG_EXE=${TARG_EXE_DEF}
 VARTOK=${VARTOKDEF}
 
+INP_FILE_TARG=""
 NOVARS=1
 DIR_SPEC=0
 OVERWRITE=-1
@@ -68,7 +71,7 @@ DRYRUN=0
 #Update variables based on options
 ################################################
 
-while getopts “hae:d:i:n:tV:v:s:” OPTIONS
+while getopts “hae:E:d:i:I:tV:v:s:” OPTIONS
 do
      case $OPTIONS in         
 	 h)                #Usage
@@ -88,7 +91,10 @@ do
 	 i)                #Input file name
 	     INP_FILE=${OPTARG}
 	     ;;
-	 n)                #Executable target name
+	 I)                #Input file name target
+	     INP_FILE_TARG=${OPTARG}
+	     ;;
+	 E)                #Executable target name
 	     TARG_EXE=${OPTARG}
 	     ;;
 	 s)                #Submission script
@@ -155,6 +161,17 @@ fi
 #//Get input file base name
 INP_BASE=`basename ${INP_FILE}`
 
+#//Make sure executable path is absolute
+rel2abs ${EXE} EXE_ABS
+
+#//Did we set an input file target?
+if [ "${INP_FILE_TARG}" == "" ]
+then
+    INP_FILE_TARG=${INP_BASE}
+else
+    INP_FILE_TARG=`basename ${INP_FILE_TARG}`
+fi
+
 #//Do we want to append date? If so do it
 if [ ${APPEND_DATE} -eq 1 ]
 then
@@ -181,9 +198,9 @@ then
 fi
 
 #Executable exists?
-if [ ! -e ${EXE} ]
+if [ ! -e ${EXE_ABS} ]
 then
-    errmesg "Executable '${EXE}' does not exist."
+    errmesg "Executable '${EXE_ABS}' does not exist."
     exit 1
 fi
 
@@ -216,14 +233,14 @@ then
     fi
 
     #Copy input file
-    cp ${INP_FILE} ${DIR}
+    cp ${INP_FILE} ${DIR}/${INP_FILE_TARG}
     
     #Link executable
     if [ ! ${OVERWRITE} -eq 1 ]
     then
-	ln -s ${EXE} ${DIR}/${TARG_EXE}
+	ln -s ${EXE_ABS} ${DIR}/${TARG_EXE}
     else
-	ln -sf ${EXE} ${DIR}/${TARG_EXE}
+	ln -sf ${EXE_ABS} ${DIR}/${TARG_EXE}
     fi
 
     #Copy submission script
@@ -234,7 +251,8 @@ then
 else
     echo -e "Directory  :\t"${DIR}
     echo -e "Input file :\t"${INP_FILE}
-    echo -e "Executable :\t"${EXE}
+    echo -e "Target     :\t"${INP_FILE_TARG}
+    echo -e "Executable :\t"${EXE_ABS}
     echo -e "Target     :\t"${TARG_EXE}
     if [ ! "${SUBFILE}" == "" ]
     then
@@ -257,7 +275,7 @@ then
     fi
 
     #Find number variables to replace in input file
-    NFVAR=`grep -E "${VARTOK}[0-9]+" ${INP_FILE} | sed 's/.*\('"${VARTOK}"'[0-9]\+\).*/\1/g' | sort -u | wc -l`
+    NFVAR=`grep -E "${VARTOK}[0-9]+" ${INP_FILE_TARG} | sed 's/.*\('"${VARTOK}"'[0-9]\+\).*/\1/g' | sort -u | wc -l`
 
     #Check if this matches our expectations
     if [ ${NFVAR} -gt ${NVAR} ]
@@ -293,9 +311,9 @@ then
         #Replace string
 	if [ ! ${DRYRUN} -eq 1 ]
 	then
-	    sed --in-place 's/\b'"${VARSTR}"'\b/'"${VARVAL}"'/g' ${INP_BASE}
+	    sed --in-place 's/\b'"${VARSTR}"'\b/'"${VARVAL}"'/g' ${INP_FILE_TARG}
 	else
-	    echo -e "\tToken ${i} : String ${VARSTR} : ${VARVAL}"
+	    echo -e "\tToken ${i} : ${VARSTR} \tValue : ${VARVAL}"
 	fi
     done
 
