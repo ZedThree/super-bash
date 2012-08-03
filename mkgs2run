@@ -46,6 +46,9 @@ OPTIONS:
                 sequentially starting at 1 (e.g. VAR_REPLACE_1, VAR_REPLACE_2 etc.)
    -v <VAL>     Comma separated list of variables to use as replacement values.
    -s <VAL>     Submission script to copy into directory.
+   -S <VAL>     If set then calls mksub in directory. Set to a quoted string containing options to pass to mksub.
+                Note: Doesn't clean input so it's possible to chain additional commands on the end (by appending ; cmd ..)
+                      to then end of the options. 
    -t           Dryrun mode, only print information don't actually do anything.
    -a           Append date to directory
 EOF
@@ -66,12 +69,13 @@ NOVARS=1
 DIR_SPEC=0
 OVERWRITE=-1
 DRYRUN=0
+MKSUBOPTS=-1
 
 ################################################
 #Update variables based on options
 ################################################
 
-while getopts “hae:E:d:i:I:tV:v:s:” OPTIONS
+while getopts “hae:E:d:i:I:tV:v:s:S:” OPTIONS
 do
      case $OPTIONS in         
 	 h)                #Usage
@@ -100,13 +104,16 @@ do
 	 s)                #Submission script
 	     SUBFILE=${OPTARG}
 	     ;;
+	 S)                #Options to pass to mksub
+	     MKSUBOPTS=${OPTARG}
+	     ;;
 	 t)                #Dryrun mode
 	     DRYRUN=1
 	     ;;
-	 V)
+	 V)                #Variable token string
 	     VARTOK=${OPTARG}
 	     ;;
-	 v)
+	 v)                #Variable values
 	     NOVARS=0
 	     VARVALS=${OPTARG}
 	     ;;
@@ -258,6 +265,10 @@ else
     then
 	echo -e "Submission :\t"${SUBFILE}
     fi
+    if [ ! "${MKSUBOPTS}" == "-1" ]
+    then
+	echo -e "Mksub opts :\t"${MKSUBOPTS}
+    fi
 fi
 
 ################################################
@@ -317,13 +328,33 @@ then
 	fi
     done
 
+    #Move backwards
     if [ ! ${DRYRUN} -eq 1 ]
     then
-        #Move backwards
 	cd ${CUR}
     fi
 fi
+
+################################################
+#//Now make submission script if requested
+################################################
+if [ ! ${DRYRUN} -eq 1 ]
+then
+    if [ ! "${MKSUBOPTS}" == "-1" ]
+    then
+        #Get current location
+        CUR=`pwd`
     
+        #Move into directory
+        cd ${DIR}
+        
+	#Make script
+	mksub ${MKSUBOPTS}
+        
+        #Move backwards
+	cd ${CUR}
+    fi
+fi    
 ################################################
 #//Finish off
 ################################################
