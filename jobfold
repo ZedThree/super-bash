@@ -1,0 +1,13 @@
+#!/bin/bash
+#Script to print the job folder given the job id
+
+for i in "$@"
+do
+    TMP=`qstat -f $i 2> /dev/null | \
+	sed -n '/'"^    Output_Path = "'/,/'"^    Priority = "'/p'  \
+	| sed '$d' | grep -vE "^ *Priority" | tr "\n" " " | sed 's/[ \t]*//g' | \
+	awk -F":" '{print $2}' | awk -F"/" '{for(i=1;i<=NF-1 ;i++) printf $i"/"}' | awk '{print $1"\n"}' | xargs echo -e `
+   echo ${TMP}
+done
+
+exit 0
